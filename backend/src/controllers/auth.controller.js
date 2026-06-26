@@ -1,7 +1,10 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { Op } = require('sequelize');
 const { OAuth2Client } = require('google-auth-library');
 const { User } = require('../models');
 const { createError } = require('../middleware/errorHandler');
+const { sendVerificationEmail } = require('../services/email.service');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -21,11 +24,68 @@ exports.register = async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
 
-    const existing = await User.findOne({ where: { email } });
-    if (existing) return next(createError('Email already registered', 409));
+    // Remove expired unverified accounts with same email so user can re-register
+    await User.destroy({
+      where: {
+        email,
+        email_verified: false,
+        email_verification_expires: { [Op.lt]: new Date() },
+      },
+    });
 
-    const user = await User.create({ name, email, password });
-    authResponse(user, res, 201);
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      const msg = existing.email_verified
+        ? 'Email already registered'
+        : 'A verification email was already sent. Please check your inbox.';
+      return next(createError(msg, 409));
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
+
+    await User.create({
+      name,
+      email,
+      password,
+      email_verified: false,
+      email_verification_token: token,
+      email_verification_expires: expires,
+    });
+
+    await sendVerificationEmail(email, name, token);
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful. Please check your email to verify your account.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.verifyEmail = async (req, res, next) => {
+  try {
+    const { token } = req.params;
+
+    const user = await User.findOne({
+      where: { email_verification_token: token, email_verified: false },
+    });
+
+    if (!user) return next(createError('Invalid or already used verification link.', 400));
+
+    if (user.email_verification_expires < new Date()) {
+      await user.destroy();
+      return next(createError('Verification link expired. Please register again.', 400));
+    }
+
+    await user.update({
+      email_verified: true,
+      email_verification_token: null,
+      email_verification_expires: null,
+    });
+
+    res.json({ success: true, message: 'Email verified! You can now sign in.' });
   } catch (error) {
     next(error);
   }
@@ -43,6 +103,10 @@ exports.login = async (req, res, next) => {
 
     if (!user.is_active) return next(createError('Account deactivated', 403));
 
+    if (!user.email_verified) {
+      return next(createError('Please verify your email before signing in. Check your inbox for the verification link.', 403));
+    }
+
     authResponse(user, res);
   } catch (error) {
     next(error);
@@ -51,15 +115,35 @@ exports.login = async (req, res, next) => {
 
 exports.googleLogin = async (req, res, next) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) return next(createError('Google token required', 400));
+    const { idToken, accessToken } = req.body;
+    console.log('[Google Auth] idToken:', idToken ? 'present' : 'null', '| accessToken:', accessToken ? 'present' : 'null');
 
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    const { sub: googleId, email, name, picture } = payload;
+    if (!idToken && !accessToken) return next(createError('Google token required', 400));
+
+    let googleId, email, name, picture;
+
+    if (idToken) {
+      // Mobile / idToken flow
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      ({ sub: googleId, email, name, picture } = payload);
+    } else {
+      // Flutter Web flow — verify accessToken via Google userinfo endpoint
+      console.log('[Google Auth] Verifying accessToken via userinfo endpoint...');
+      const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const info = await resp.json();
+      console.log('[Google Auth] userinfo response status:', resp.status, '| sub:', info.sub, '| email:', info.email);
+      if (!resp.ok || !info.sub) return next(createError('Invalid Google access token', 401));
+      googleId = info.sub;
+      email = info.email;
+      name = info.name || email.split('@')[0]; // fallback if name missing
+      picture = info.picture;
+    }
 
     let user = await User.findOne({ where: { google_id: googleId } });
 
@@ -68,7 +152,7 @@ exports.googleLogin = async (req, res, next) => {
       if (user) {
         await user.update({ google_id: googleId, avatar: picture });
       } else {
-        user = await User.create({ name, email, google_id: googleId, avatar: picture });
+        user = await User.create({ name, email, google_id: googleId, avatar: picture, email_verified: true });
       }
     }
 

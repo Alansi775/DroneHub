@@ -17,6 +17,7 @@ const validateLogin = [
 router.post('/register', validateRegister, authController.register);
 router.post('/login', validateLogin, authController.login);
 router.post('/google', authController.googleLogin);
+router.get('/verify-email/:token', authController.verifyEmail);
 router.get('/me', authenticate, authController.getMe);
 
 module.exports = router;

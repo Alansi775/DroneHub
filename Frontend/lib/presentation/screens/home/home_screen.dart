@@ -289,7 +289,7 @@ class _VideoSectionState extends State<_VideoSection> {
   static const int _initialPage = _virtualCount ~/ 2;
 
   late PageController _pageController;
-  int _realIndex = 0;
+  int _realIndex = _initialPage % _videos.length;
 
   @override
   void initState() {

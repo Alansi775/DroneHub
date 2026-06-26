@@ -9,6 +9,8 @@ import '../../presentation/screens/checkout/checkout_screen.dart';
 import '../../presentation/screens/checkout/order_success_screen.dart';
 import '../../presentation/screens/auth/login_screen.dart';
 import '../../presentation/screens/auth/register_screen.dart';
+import '../../presentation/screens/auth/verify_email_screen.dart';
+import '../../presentation/screens/onboarding/address_setup_screen.dart';
 import '../../presentation/screens/profile/profile_screen.dart';
 import '../../presentation/screens/orders/orders_screen.dart';
 import '../../presentation/screens/orders/order_detail_screen.dart';
@@ -19,12 +21,9 @@ import '../../presentation/screens/admin/admin_add_product_screen.dart';
 import '../../presentation/screens/main_shell.dart';
 import '../../presentation/providers/auth_provider.dart';
 
-// Keys are created once — never recreated
 final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _shellKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
 
-/// ChangeNotifier that mirrors AuthState — used as router refreshListenable
-/// so GoRouter refreshes on auth changes without rebuilding itself.
 class _AuthNotifierBridge extends ChangeNotifier {
   _AuthNotifierBridge(this._ref) {
     _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
@@ -41,10 +40,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/',
     refreshListenable: bridge,
     redirect: (context, state) {
-      final authState = ref.read(authProvider);
-      final isLoggedIn = authState.user != null;
-      final isAdmin = authState.user?.role == 'admin';
+      final auth = ref.read(authProvider);
+      final isLoggedIn = auth.user != null;
+      final isAdmin = auth.user?.role == 'admin';
       final path = state.uri.path;
+
+      // After login/google, redirect to address setup if address is missing
+      if (isLoggedIn && auth.needsOnboarding && path != '/onboarding') {
+        return '/onboarding';
+      }
 
       final authRoutes = ['/login', '/register'];
       final protectedRoutes = ['/profile', '/orders', '/checkout'];
@@ -60,6 +64,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      // Onboarding (no shell — full screen, no navbar)
+      GoRoute(
+        path: '/onboarding',
+        parentNavigatorKey: _rootKey,
+        builder: (c, s) => const AddressSetupScreen(),
+      ),
+
+      // Email verification (no shell)
+      GoRoute(
+        path: '/verify-email',
+        parentNavigatorKey: _rootKey,
+        builder: (c, s) => VerifyEmailScreen(token: s.uri.queryParameters['token'] ?? ''),
+      ),
+
       ShellRoute(
         navigatorKey: _shellKey,
         builder: (context, state, child) => MainShell(child: child),
@@ -72,30 +90,33 @@ final routerProvider = Provider<GoRouter>((ref) {
               search: s.uri.queryParameters['search'],
             ),
           ),
-          GoRoute(path: '/products/:slug', builder: (c, s) => ProductDetailScreen(slug: s.pathParameters['slug']!)),
+          GoRoute(path: '/products/:slug', builder: (c, s) => ProductDetailScreen(
+            slug: s.pathParameters['slug']!,
+            autoAdd: s.uri.queryParameters['autoAdd'] == 'true',
+          )),
           GoRoute(path: '/cart', builder: (c, s) => const CartScreen()),
           GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
           GoRoute(path: '/orders', builder: (c, s) => const OrdersScreen()),
           GoRoute(path: '/orders/:id', builder: (c, s) => OrderDetailScreen(orderId: s.pathParameters['id']!)),
-        ],
-      ),
-      GoRoute(path: '/checkout', builder: (c, s) => const CheckoutScreen()),
-      GoRoute(
-        path: '/order-success/:orderId',
-        builder: (c, s) => OrderSuccessScreen(orderId: s.pathParameters['orderId']!),
-      ),
-      GoRoute(path: '/login', builder: (c, s) => LoginScreen(redirect: s.uri.queryParameters['redirect'])),
-      GoRoute(path: '/register', builder: (c, s) => const RegisterScreen()),
+          GoRoute(path: '/checkout', builder: (c, s) => const CheckoutScreen()),
+          GoRoute(
+            path: '/order-success/:orderId',
+            builder: (c, s) => OrderSuccessScreen(orderId: s.pathParameters['orderId']!),
+          ),
+          GoRoute(path: '/login', builder: (c, s) => LoginScreen(redirect: s.uri.queryParameters['redirect'])),
+          GoRoute(path: '/register', builder: (c, s) => RegisterScreen(redirect: s.uri.queryParameters['redirect'])),
 
-      // Admin
-      GoRoute(
-        path: '/admin',
-        builder: (c, s) => const AdminDashboardScreen(),
-        routes: [
-          GoRoute(path: 'products', builder: (c, s) => const AdminProductsScreen()),
-          GoRoute(path: 'products/add', builder: (c, s) => const AdminAddProductScreen()),
-          GoRoute(path: 'products/edit/:id', builder: (c, s) => AdminAddProductScreen(productId: s.pathParameters['id'])),
-          GoRoute(path: 'orders', builder: (c, s) => const AdminOrdersScreen()),
+          // Admin
+          GoRoute(
+            path: '/admin',
+            builder: (c, s) => const AdminDashboardScreen(),
+            routes: [
+              GoRoute(path: 'products', builder: (c, s) => const AdminProductsScreen()),
+              GoRoute(path: 'products/add', builder: (c, s) => const AdminAddProductScreen()),
+              GoRoute(path: 'products/edit/:id', builder: (c, s) => AdminAddProductScreen(productId: s.pathParameters['id'])),
+              GoRoute(path: 'orders', builder: (c, s) => const AdminOrdersScreen()),
+            ],
+          ),
         ],
       ),
     ],

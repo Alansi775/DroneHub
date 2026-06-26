@@ -28,13 +28,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final ok = await ref.read(authProvider.notifier).login(_emailCtrl.text.trim(), _passCtrl.text);
-    if (ok && mounted) context.go(widget.redirect?.isNotEmpty == true ? widget.redirect! : '/');
+    final redirect = widget.redirect?.isNotEmpty == true ? widget.redirect : null;
+    final ok = await ref.read(authProvider.notifier).login(
+      _emailCtrl.text.trim(), _passCtrl.text,
+      redirectAfter: redirect,
+    );
+    if (!ok || !mounted) return;
+    // If onboarding is needed, router handles redirect to /onboarding.
+    // After onboarding, AddressSetupScreen uses pendingRedirect.
+    // If no onboarding needed, go directly to the target.
+    final auth = ref.read(authProvider);
+    if (!auth.needsOnboarding) context.go(redirect ?? '/');
   }
 
   Future<void> _google() async {
-    final ok = await ref.read(authProvider.notifier).googleSignIn();
-    if (ok && mounted) context.go(widget.redirect?.isNotEmpty == true ? widget.redirect! : '/');
+    final redirect = widget.redirect?.isNotEmpty == true ? widget.redirect : null;
+    final ok = await ref.read(authProvider.notifier).googleSignIn(redirectAfter: redirect);
+    if (!ok || !mounted) return;
+    final auth = ref.read(authProvider);
+    if (!auth.needsOnboarding) context.go(redirect ?? '/');
   }
 
   @override
@@ -90,7 +102,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 8),
 
                       GestureDetector(
-                        onTap: () => context.pushReplacement('/register'),
+                        onTap: () {
+                          final r = widget.redirect;
+                          context.pushReplacement(r != null && r.isNotEmpty ? '/register?redirect=${Uri.encodeComponent(r)}' : '/register');
+                        },
                         child: RichText(
                           text: TextSpan(
                             style: TextStyle(fontSize: 13, color: isDark ? Colors.white54 : Colors.black54),

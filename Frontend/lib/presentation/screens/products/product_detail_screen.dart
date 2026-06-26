@@ -16,7 +16,8 @@ final _productDetailProvider =
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
   final String slug;
-  const ProductDetailScreen({super.key, required this.slug});
+  final bool autoAdd;
+  const ProductDetailScreen({super.key, required this.slug, this.autoAdd = false});
 
   @override
   ConsumerState<ProductDetailScreen> createState() =>
@@ -28,6 +29,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   int _imgIdx = 0;
   int _quantity = 1;
   bool _addingToCart = false;
+  bool _didAutoAdd = false;
 
   @override
   void dispose() {
@@ -54,19 +56,26 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ],
           ),
         ),
-        data: (p) => _ProductLayout(
-          product: p,
-          pageCtrl: _pageCtrl,
-          imgIdx: _imgIdx,
-          quantity: _quantity,
-          addingToCart: _addingToCart,
-          isDark: isDark,
-          onPageChanged: (i) => setState(() => _imgIdx = i),
-          onQtyDec: () { if (_quantity > 1) setState(() => _quantity--); },
-          onQtyInc: () { if (_quantity < p.stock) setState(() => _quantity++); },
-          onAddToCart: () => _addToCart(p),
-          onImageTap: (i) => _openFullscreen(p.allImageUrls, i),
-        ),
+        data: (p) {
+          // Auto-add to cart if user was redirected back after auth
+          if (widget.autoAdd && !_didAutoAdd && ref.read(authProvider).isAuthenticated) {
+            _didAutoAdd = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) => _addToCart(p));
+          }
+          return _ProductLayout(
+            product: p,
+            pageCtrl: _pageCtrl,
+            imgIdx: _imgIdx,
+            quantity: _quantity,
+            addingToCart: _addingToCart,
+            isDark: isDark,
+            onPageChanged: (i) => setState(() => _imgIdx = i),
+            onQtyDec: () { if (_quantity > 1) setState(() => _quantity--); },
+            onQtyInc: () { if (_quantity < p.stock) setState(() => _quantity++); },
+            onAddToCart: () => _addToCart(p),
+            onImageTap: (i) => _openFullscreen(p.allImageUrls, i),
+          );
+        },
       ),
     );
   }
@@ -74,7 +83,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Future<void> _addToCart(ProductModel product) async {
     final auth = ref.read(authProvider);
     if (!auth.isAuthenticated) {
-      context.push('/login?redirect=/products/${product.slug}');
+      context.push('/login?redirect=${Uri.encodeComponent('/products/${product.slug}?autoAdd=true')}');
       return;
     }
     setState(() => _addingToCart = true);

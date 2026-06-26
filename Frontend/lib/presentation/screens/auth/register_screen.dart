@@ -6,7 +6,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
-  const RegisterScreen({super.key});
+  final String? redirect;
+  const RegisterScreen({super.key, this.redirect});
 
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
@@ -29,17 +30,29 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    final ok = await ref.read(authProvider.notifier).register(
+    final redirect = widget.redirect?.isNotEmpty == true ? widget.redirect : null;
+    // register() stores pendingRedirect via awaitingVerification path;
+    // the user verifies email, logs in manually from the verify screen,
+    // and at that point we rely on the login screen's redirect param.
+    // So we don't need to pass redirectAfter here — the user will log in fresh.
+    await ref.read(authProvider.notifier).register(
       _nameCtrl.text.trim(),
       _emailCtrl.text.trim(),
       _passwordCtrl.text,
     );
-    if (ok && mounted) context.go('/');
+    // State now has awaitingVerification=true — UI handles showing the email-sent screen.
+    // If somehow auto-logged-in (future), navigate appropriately.
+    if (mounted && ref.read(authProvider).isAuthenticated) {
+      context.go(redirect ?? '/');
+    }
   }
 
   Future<void> _google() async {
-    final ok = await ref.read(authProvider.notifier).googleSignIn();
-    if (ok && mounted) context.go('/');
+    final redirect = widget.redirect?.isNotEmpty == true ? widget.redirect : null;
+    final ok = await ref.read(authProvider.notifier).googleSignIn(redirectAfter: redirect);
+    if (!ok || !mounted) return;
+    final auth = ref.read(authProvider);
+    if (!auth.needsOnboarding) context.go(redirect ?? '/');
   }
 
   @override
@@ -47,6 +60,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final auth = ref.watch(authProvider);
     final size = MediaQuery.of(context).size;
+
+    // Show email-sent success screen
+    if (auth.awaitingVerification) {
+      return _VerificationSentScreen(email: auth.verificationEmail ?? '', isDark: isDark);
+    }
 
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
@@ -94,7 +112,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       const SizedBox(height: 8),
 
                       GestureDetector(
-                        onTap: () => context.pushReplacement('/login'),
+                        onTap: () {
+                          final r = widget.redirect;
+                          context.pushReplacement(r != null && r.isNotEmpty ? '/login?redirect=${Uri.encodeComponent(r)}' : '/login');
+                        },
                         child: RichText(
                           text: TextSpan(
                             style: TextStyle(fontSize: 13, color: isDark ? Colors.white54 : Colors.black54),
@@ -438,6 +459,76 @@ class _CreateBtn extends StatelessWidget {
                   'Create Account',
                   style: TextStyle(color: isDark ? Colors.black : Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Email sent success screen ────────────────────────────────────────────────
+
+class _VerificationSentScreen extends ConsumerWidget {
+  final String email;
+  final bool isDark;
+  const _VerificationSentScreen({required this.email, required this.isDark});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cardBg = isDark ? const Color(0xFF0E0E0E) : Colors.white;
+    final border = isDark ? const Color(0xFF1C1C1C) : const Color(0xFFE8E8E8);
+
+    return Scaffold(
+      backgroundColor: isDark ? Colors.black : const Color(0xFFF8F8F8),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Container(
+            margin: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(44),
+            decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: border)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RichText(
+                  text: TextSpan(
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: isDark ? Colors.white : Colors.black),
+                    children: const [TextSpan(text: 'Drone'), TextSpan(text: 'Hub', style: TextStyle(color: Color(0xFF3B82F6)))],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Container(
+                  width: 72, height: 72,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFF3B82F6).withValues(alpha: 0.1)),
+                  child: const Icon(Icons.mark_email_read_outlined, size: 36, color: Color(0xFF3B82F6)),
+                ).animate().scale(duration: 500.ms, curve: Curves.elasticOut),
+                const SizedBox(height: 24),
+                Text('Check your inbox', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: isDark ? Colors.white : Colors.black)).animate().fadeIn(delay: 100.ms),
+                const SizedBox(height: 10),
+                Text(
+                  'We sent a verification link to\n$email\n\nClick the link in the email to activate your account.',
+                  style: TextStyle(fontSize: 14, color: isDark ? Colors.white54 : Colors.black45, height: 1.6),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(delay: 150.ms),
+                const SizedBox(height: 32),
+                GestureDetector(
+                  onTap: () {
+                    ref.read(authProvider.notifier).clearAwaitingVerification();
+                    context.go('/login');
+                  },
+                  child: Container(
+                    width: double.infinity, height: 48,
+                    decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(10)),
+                    child: const Center(child: Text('Go to Sign In', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14))),
+                  ),
+                ).animate().fadeIn(delay: 200.ms),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => ref.read(authProvider.notifier).clearAwaitingVerification(),
+                  child: Text('Back to Register', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isDark ? Colors.white38 : Colors.black38)),
+                ).animate().fadeIn(delay: 250.ms),
+              ],
+            ),
+          ).animate().fadeIn().slideY(begin: 0.05),
         ),
       ),
     );

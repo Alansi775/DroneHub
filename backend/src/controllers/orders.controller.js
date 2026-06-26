@@ -36,9 +36,9 @@ exports.createOrder = async (req, res, next) => {
     }
 
     const subtotal = cartItems.reduce((sum, item) => sum + parseFloat(item.product.price) * item.quantity, 0);
-    const shippingCost = subtotal >= 100 ? 0 : 9.99;
-    const tax = subtotal * 0.18;
-    const total = subtotal + shippingCost + tax;
+    const shippingCost = 0; // free shipping — admin sets per-order pricing later
+    const tax = 0;
+    const total = subtotal;
 
     const paymentResult = await paymentService.processPayment({ amount: total, method: paymentMethod });
 

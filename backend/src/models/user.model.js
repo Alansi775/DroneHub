@@ -28,7 +28,7 @@ const User = sequelize.define('User', {
     unique: true,
   },
   avatar: {
-    type: DataTypes.STRING(500),
+    type: DataTypes.TEXT,
     allowNull: true,
   },
   role: {
@@ -67,6 +67,18 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
   },
+  email_verified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
+  email_verification_token: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+  },
+  email_verification_expires: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
 }, {
   tableName: 'users',
   hooks: {
@@ -92,6 +104,8 @@ User.prototype.toJSON = function () {
   const values = { ...this.get() };
   delete values.password;
   delete values.google_id;
+  delete values.email_verification_token;
+  delete values.email_verification_expires;
   return values;
 };
 

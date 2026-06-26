@@ -25,17 +25,21 @@ class AuthRepository {
     return user;
   }
 
-  Future<UserModel> register(String name, String email, String password) async {
+  Future<UserModel?> register(String name, String email, String password) async {
     final res = await _api.post('/auth/register', data: {'name': name, 'email': email, 'password': password});
     final data = res.data as Map<String, dynamic>;
+    if (data['token'] == null) return null; // email verification required
     await _storage.saveToken(data['token'] as String);
     final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
     await _storage.saveUser(user);
     return user;
   }
 
-  Future<UserModel> googleLogin(String idToken) async {
-    final res = await _api.post('/auth/google', data: {'idToken': idToken});
+  Future<UserModel> googleLogin({String? idToken, String? accessToken}) async {
+    final res = await _api.post('/auth/google', data: {
+      if (idToken != null) 'idToken': idToken,
+      if (accessToken != null) 'accessToken': accessToken,
+    });
     final data = res.data as Map<String, dynamic>;
     await _storage.saveToken(data['token'] as String);
     final user = UserModel.fromJson(data['user'] as Map<String, dynamic>);
