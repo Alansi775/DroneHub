@@ -12,8 +12,9 @@ async function startServer() {
     await sequelize.sync({ alter: true });
     console.log('✅ Database synchronized');
 
-    app.listen(PORT, () => {
-      console.log(`🚀 DroneHub API running on port ${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 DroneHub API running on http://localhost:${PORT}`);
+      console.log(`🌐 Network access: http://Mohammeds-Mackbook-MacBook-Air.local:${PORT}`);
       console.log(`📦 Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {

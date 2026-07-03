@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 class ProductImage {
   final String id;
   final String url;
@@ -75,9 +77,9 @@ class ProductModel {
   }
 
   String formatPrice(double v) {
-    // Preserve up to 4 decimal places, strip trailing zeros
-    final s = v.toStringAsFixed(4).replaceAll(RegExp(r'\.?0+$'), '');
-    return '$currencySymbol$s';
+    // Integer part with thousands separator, up to 4 decimal places, strip trailing zeros
+    final fmt = NumberFormat('#,##0.####', 'en_US');
+    return '$currencySymbol${fmt.format(v)}';
   }
 
   String? get primaryImageUrl {
@@ -87,7 +89,7 @@ class ProductModel {
     return images.first.url;
   }
 
-  static const String _imgBase = 'http://10.155.83.72:5001';
+  static const String _imgBase = 'http://localhost:5001';
 
   String get fullPrimaryImageUrl {
     final url = primaryImageUrl;

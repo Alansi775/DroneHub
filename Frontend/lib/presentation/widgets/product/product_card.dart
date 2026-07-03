@@ -148,54 +148,61 @@ class _ProductCardState extends State<ProductCard> {
                   Expanded(
                     flex: 2,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Category
                           Text(
                             p.category.replaceAll('_', ' ').toUpperCase(),
                             style: const TextStyle(
                               color: AppColors.accent,
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
+                              letterSpacing: 1.5,
                             ),
                           ),
-                          const SizedBox(height: 3),
+                          const SizedBox(height: 4),
+                          // Name
                           Text(
                             p.name,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                               color: isDark ? Colors.white : Colors.black,
-                              height: 1.3,
+                              height: 1.25,
                             ),
                           ),
                           if (p.shortDescription != null && p.shortDescription!.isNotEmpty) ...[
                             const SizedBox(height: 3),
-                            Text(
-                              p.shortDescription!,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isDark ? Colors.white38 : Colors.black38,
-                                height: 1.45,
+                            Expanded(
+                              child: Text(
+                                p.shortDescription!,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: isDark ? Colors.white38 : Colors.black38,
+                                  height: 1.4,
+                                ),
                               ),
                             ),
-                          ],
-                          const Spacer(),
+                          ] else
+                            const Spacer(),
+                          const SizedBox(height: 8),
+                          // Price row
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Text(
                                 p.formatPrice(p.price),
                                 style: TextStyle(
-                                  fontSize: 17,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w800,
                                   color: isDark ? Colors.white : Colors.black,
+                                  letterSpacing: -0.3,
                                 ),
                               ),
                               if (p.hasDiscount) ...[
@@ -204,16 +211,40 @@ class _ProductCardState extends State<ProductCard> {
                                   p.formatPrice(p.comparePrice!),
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isDark ? Colors.white38 : Colors.black38,
+                                    color: isDark ? Colors.white30 : Colors.black26,
                                     decoration: TextDecoration.lineThrough,
                                   ),
                                 ),
                               ],
                               const Spacer(),
-                              Icon(
-                                Icons.arrow_forward_ios_rounded,
-                                size: 11,
-                                color: isDark ? Colors.white30 : Colors.black26,
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: _hovered
+                                    ? const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
+                                    : const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: _hovered ? AppColors.accent : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: _hovered ? AppColors.accent : (isDark ? Colors.white24 : Colors.black12),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_hovered)
+                                      Text(
+                                        'Buy',
+                                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                                      ),
+                                    if (_hovered) const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.arrow_forward_ios_rounded,
+                                      size: 10,
+                                      color: _hovered ? Colors.white : (isDark ? Colors.white30 : Colors.black26),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),

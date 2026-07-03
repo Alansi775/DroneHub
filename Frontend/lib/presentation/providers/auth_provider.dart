@@ -57,7 +57,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     scopes: ['email', 'profile'],
   );
 
-  AuthNotifier(this._repo) : super(const AuthState()) {
+  AuthNotifier(this._repo) : super(const AuthState(isLoading: true)) {
     _loadStoredUser();
   }
 

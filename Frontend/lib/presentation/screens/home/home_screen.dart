@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,8 @@ import 'package:video_player/video_player.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../widgets/product/product_card.dart';
 import '../../widgets/common/loading_shimmer.dart';
 
@@ -174,95 +177,401 @@ class _PillBtn extends StatelessWidget {
 
 // ─── 2. Bento Grid ────────────────────────────────────────────────────────────
 
-class _BentoGrid extends StatelessWidget {
+class _BentoGrid extends ConsumerWidget {
   final bool isDark;
   const _BentoGrid({required this.isDark});
 
-  static const _cards = [
-    {'cat': 'Brushless Motors', 'title': 'M-Series\nMotors', 'sub': 'Precision. Power.'},
-    {'cat': 'Long-Range Link', 'title': 'Sky-Link\nPro', 'sub': 'The World In Your Pocket'},
-    {'cat': 'Action Cameras', 'title': 'Cam X4\nMini', 'sub': '4K. Stabilized. Tiny.'},
-  ];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final w = MediaQuery.of(context).size.width;
     final cols = w > 900 ? 3 : w > 600 ? 2 : 1;
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cols,
-        childAspectRatio: 0.9,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+    return ref.watch(_featuredProvider).when(
+      loading: () => GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: cols,
+          childAspectRatio: 0.9,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: cols,
+        itemBuilder: (_, __) => Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF141414) : const Color(0xFFF5F5F7),
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
       ),
-      itemCount: _cards.length,
-      itemBuilder: (_, i) => _BentoCard(data: _cards[i], isDark: isDark, index: i),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (products) {
+        final items = products.take(3).toList();
+        if (items.isEmpty) return const SizedBox.shrink();
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            childAspectRatio: 0.9,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: items.length,
+          itemBuilder: (_, i) => _BentoCard(product: items[i], isDark: isDark, index: i),
+        );
+      },
     );
   }
 }
 
-class _BentoCard extends StatelessWidget {
-  final Map<String, String> data;
+class _BentoCard extends ConsumerStatefulWidget {
+  final ProductModel product;
   final bool isDark;
   final int index;
-  const _BentoCard({required this.data, required this.isDark, required this.index});
+  const _BentoCard({required this.product, required this.isDark, required this.index});
+
+  @override
+  ConsumerState<_BentoCard> createState() => _BentoCardState();
+}
+
+class _BentoCardState extends ConsumerState<_BentoCard> {
+  bool _hovered = false;
+  bool _addingToCart = false;
+  int _imgIndex = 0;
+  Timer? _cycleTimer;
+
+  List<String> get _imgs => widget.product.allImageUrls;
+
+  void _startCycling() {
+    if (_imgs.length <= 1) return;
+    _cycleTimer = Timer.periodic(const Duration(milliseconds: 2200), (_) {
+      if (mounted) setState(() => _imgIndex = (_imgIndex + 1) % _imgs.length);
+    });
+  }
+
+  void _stopCycling() {
+    _cycleTimer?.cancel();
+    _cycleTimer = null;
+    if (mounted) setState(() => _imgIndex = 0);
+  }
+
+  @override
+  void dispose() {
+    _cycleTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleBuyNow() async {
+    final p = widget.product;
+    final auth = ref.read(authProvider);
+    if (!auth.isAuthenticated) {
+      context.push('/login?redirect=${Uri.encodeComponent('/products/${p.slug}')}');
+      return;
+    }
+    setState(() => _addingToCart = true);
+    try {
+      await ref.read(cartProvider.notifier).addItem(p.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${p.name} added to cart'),
+          backgroundColor: AppColors.accent,
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _addingToCart = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF141414) : const Color(0xFFF5F5F7),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(data['cat']!, style: TextStyle(fontSize: 12, letterSpacing: 0.5, color: isDark ? Colors.white.withValues(alpha: 0.45) : Colors.black38)),
-          const SizedBox(height: 8),
-          Text(
-            data['title']!,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: isDark ? Colors.white : Colors.black, height: 1.15, letterSpacing: -0.5),
+    final p = widget.product;
+    final imgs = _imgs;
+    final currentUrl = imgs.isNotEmpty ? imgs[_imgIndex] : '';
+    final hasImg = currentUrl.isNotEmpty;
+    final fallback = ColoredBox(color: widget.isDark ? const Color(0xFF111111) : const Color(0xFFF0F0F0));
+
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() => _hovered = true);
+        _startCycling();
+      },
+      onExit: (_) {
+        setState(() => _hovered = false);
+        _stopCycling();
+      },
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => context.push('/products/${p.slug}'),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+          transform: _hovered ? (Matrix4.identity()..translate(0.0, -6.0, 0.0)) : Matrix4.identity(),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            color: widget.isDark ? AppColors.darkCard : AppColors.lightCard,
+            border: Border.all(
+              color: _hovered
+                  ? AppColors.accent.withValues(alpha: 0.50)
+                  : widget.isDark ? Colors.white.withValues(alpha: 0.07) : AppColors.lightBorder,
+              width: 1.5,
+            ),
+            boxShadow: _hovered
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 32, offset: const Offset(0, 12))]
+                : [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 10, offset: const Offset(0, 4))],
           ),
-          const SizedBox(height: 6),
-          Text(data['sub']!, style: TextStyle(fontSize: 14, color: isDark ? Colors.white54 : Colors.black45)),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          clipBehavior: Clip.hardEdge,
+          child: Column(
             children: [
-              _TextLink('Learn More', isDark: isDark),
-              const SizedBox(width: 20),
-              _TextLink('Buy Now', isDark: isDark, accent: true),
+              // ── IMAGE SECTION
+              Expanded(
+                flex: 62,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Crossfade image cycling on hover
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 700),
+                      transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                      child: hasImg
+                          ? Image.network(
+                              currentUrl,
+                              key: ValueKey(currentUrl),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (_, __, ___) => fallback,
+                            )
+                          : fallback,
+                    ),
+
+                    // Subtle scale on hover (separate from image so switcher works cleanly)
+                    if (_hovered)
+                      const SizedBox.shrink(),
+
+                    // Vignette — strong at top for text, clear in center to show drone
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            stops: const [0.0, 0.42, 0.70, 1.0],
+                            colors: [
+                              Colors.black.withValues(alpha: 0.78),
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.20),
+                              Colors.black.withValues(alpha: 0.55),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Category + Name + CTAs — pinned to top of image
+                    Positioned(
+                      top: 18,
+                      left: 16,
+                      right: 16,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            p.category.replaceAll('_', ' ').toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white60,
+                              fontSize: 10,
+                              letterSpacing: 2.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            p.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.4,
+                              height: 1.15,
+                              shadows: [Shadow(color: Colors.black, blurRadius: 18)],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _BentoButton(
+                                label: 'Learn More',
+                                onTap: () => context.push('/products/${p.slug}'),
+                              ),
+                              const SizedBox(width: 10),
+                              _BentoButton(
+                                label: _addingToCart ? '...' : 'Buy Now',
+                                accent: true,
+                                onTap: _addingToCart ? null : _handleBuyNow,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Image counter dots — bottom center, only when multiple images + hovered
+                    if (imgs.length > 1 && _hovered)
+                      Positioned(
+                        bottom: 10,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(imgs.length, (i) => AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                            width: i == _imgIndex ? 16 : 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              color: i == _imgIndex
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          )),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // ── INFO SECTION — description + price below image
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                color: widget.isDark ? AppColors.darkCard : AppColors.lightCard,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (p.shortDescription != null && p.shortDescription!.isNotEmpty)
+                      Text(
+                        p.shortDescription!,
+                        style: TextStyle(
+                          color: widget.isDark ? Colors.white54 : Colors.black54,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          p.formatPrice(p.price),
+                          style: TextStyle(
+                            color: widget.isDark ? Colors.white : Colors.black,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        if (p.hasDiscount) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            p.formatPrice(p.comparePrice!),
+                            style: TextStyle(
+                              color: widget.isDark ? Colors.white30 : Colors.black26,
+                              fontSize: 13,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
+                            ),
+                            child: Text(
+                              '-${p.discountPercent.toInt()}%',
+                              style: const TextStyle(
+                                color: AppColors.accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          const Spacer(),
-          Icon(Icons.airplanemode_active_rounded, size: 80, color: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFDDDDDD)),
-        ],
+        ),
       ),
-    ).animate(delay: Duration(milliseconds: 80 * index)).fadeIn().slideY(begin: 0.12, curve: Curves.easeOut);
+    ).animate(delay: Duration(milliseconds: 80 * widget.index)).fadeIn().slideY(begin: 0.12, curve: Curves.easeOut);
   }
 }
 
-class _TextLink extends StatelessWidget {
+class _BentoButton extends StatefulWidget {
   final String label;
-  final bool isDark;
   final bool accent;
-  const _TextLink(this.label, {required this.isDark, this.accent = false});
+  final VoidCallback? onTap;
+  const _BentoButton({required this.label, this.accent = false, this.onTap});
+
+  @override
+  State<_BentoButton> createState() => _BentoButtonState();
+}
+
+class _BentoButtonState extends State<_BentoButton> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ? AppColors.accent : (isDark ? Colors.white : Colors.black);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
-        const SizedBox(width: 3),
-        Icon(Icons.arrow_forward_ios_rounded, size: 10, color: color),
-      ],
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: widget.accent
+              ? AppColors.accent.withValues(alpha: _pressed ? 1.0 : 0.88)
+              : Colors.white.withValues(alpha: _pressed ? 0.25 : 0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: widget.accent
+                ? Colors.transparent
+                : Colors.white.withValues(alpha: 0.35),
+            width: 1,
+          ),
+          boxShadow: widget.accent
+              ? [BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 10, offset: const Offset(0, 3))]
+              : null,
+        ),
+        child: Text(
+          widget.label,
+          style: TextStyle(
+            color: widget.accent ? Colors.white : Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+            shadows: widget.accent ? null : const [Shadow(color: Colors.black54, blurRadius: 6)],
+          ),
+        ),
+      ),
     );
   }
 }

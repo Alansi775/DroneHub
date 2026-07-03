@@ -286,7 +286,6 @@ exports.getAllProducts = async (req, res, next) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const { count, rows } = await Product.findAndCountAll({
-      where: { is_active: true },
       include: [{ model: ProductImage, as: 'images' }],
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),

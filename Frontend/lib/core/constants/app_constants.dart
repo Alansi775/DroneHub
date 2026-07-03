@@ -2,8 +2,10 @@ class AppConstants {
   static const String appName = 'DroneHub';
   static const String appVersion = '1.0.0';
 
-  // API
-  static const String baseUrl = 'http://10.155.83.72:5001/api';
+  // API — localhost works in any network since Flutter Web runs on the same Mac.
+  // For testing from a phone/tablet on the same network, use:
+  // http://Mohammeds-Mackbook-MacBook-Air.local:5001/api
+  static const String baseUrl = 'http://localhost:5001/api';
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 30);
 

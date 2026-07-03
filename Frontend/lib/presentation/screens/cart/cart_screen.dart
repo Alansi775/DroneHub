@@ -110,14 +110,9 @@ class _CartLayout extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final w = MediaQuery.of(context).size.width;
-    final shippingCost = cart.subtotal >= 100 ? 0.0 : 9.99;
-    final tax = cart.subtotal * 0.10;
-    final total = cart.subtotal + shippingCost + tax;
     final summary = _SummaryData(
       subtotal: cart.subtotal,
-      shipping: shippingCost,
-      tax: tax,
-      total: total,
+      total: cart.subtotal,
       count: cart.itemCount,
     );
 
@@ -380,9 +375,9 @@ class _Btn extends StatelessWidget {
 // ─── Order summary ────────────────────────────────────────────────────────────
 
 class _SummaryData {
-  final double subtotal, shipping, tax, total;
+  final double subtotal, total;
   final int count;
-  const _SummaryData({required this.subtotal, required this.shipping, required this.tax, required this.total, required this.count});
+  const _SummaryData({required this.subtotal, required this.total, required this.count});
 }
 
 class _OrderSummary extends StatelessWidget {
@@ -409,29 +404,9 @@ class _OrderSummary extends StatelessWidget {
           Text('Order Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: fg)),
           const SizedBox(height: 20),
 
-          _SummaryRow('Subtotal (${data.count} ${data.count == 1 ? 'item' : 'items'})', '\$${data.subtotal.toStringAsFixed(2)}', isDark: isDark),
+          _SummaryRow('Subtotal (${data.count} ${data.count == 1 ? 'item' : 'items'})', _fmtPrice(data.subtotal), isDark: isDark),
           const SizedBox(height: 10),
-          _SummaryRow('Shipping', data.shipping == 0 ? 'Free' : '\$${data.shipping.toStringAsFixed(2)}',
-              isDark: isDark, valueColor: data.shipping == 0 ? AppColors.success : null),
-          const SizedBox(height: 10),
-          _SummaryRow('Tax (10%)', '\$${data.tax.toStringAsFixed(2)}', isDark: isDark),
-
-          if (data.shipping == 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(children: [
-                  const Icon(Icons.local_shipping_outlined, size: 13, color: AppColors.success),
-                  const SizedBox(width: 6),
-                  Text('Free shipping on orders over \$100', style: const TextStyle(color: AppColors.success, fontSize: 11, fontWeight: FontWeight.w600)),
-                ]),
-              ),
-            ),
+          _SummaryRow('Shipping', 'Free', isDark: isDark, valueColor: AppColors.success),
 
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -442,7 +417,7 @@ class _OrderSummary extends StatelessWidget {
             children: [
               Text('Total', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: fg)),
               const Spacer(),
-              Text('\$${data.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.accent)),
+              Text(_fmtPrice(data.total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.accent)),
             ],
           ),
 
@@ -488,6 +463,9 @@ class _OrderSummary extends StatelessWidget {
     );
   }
 }
+
+/// Formats a price exactly as stored — strips trailing zeros, keeps all significant decimals.
+String _fmtPrice(double v) => '\$${v.toStringAsFixed(4).replaceAll(RegExp(r'\.?0+$'), '')}';
 
 class _SummaryRow extends StatelessWidget {
   final String label, value;

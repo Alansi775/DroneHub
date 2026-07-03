@@ -21,8 +21,9 @@ import '../../presentation/screens/admin/admin_add_product_screen.dart';
 import '../../presentation/screens/main_shell.dart';
 import '../../presentation/providers/auth_provider.dart';
 
-final _rootKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+final _rootKey  = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _shellKey = GlobalKey<NavigatorState>(debugLabel: 'shell');
+final _adminKey = GlobalKey<NavigatorState>(debugLabel: 'admin');
 
 class _AuthNotifierBridge extends ChangeNotifier {
   _AuthNotifierBridge(this._ref) {
@@ -41,43 +42,39 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: bridge,
     redirect: (context, state) {
       final auth = ref.read(authProvider);
+      if (auth.isLoading) return null;
+
       final isLoggedIn = auth.user != null;
       final isAdmin = auth.user?.role == 'admin';
       final path = state.uri.path;
 
-      // After login/google, redirect to address setup if address is missing
-      if (isLoggedIn && auth.needsOnboarding && path != '/onboarding') {
-        return '/onboarding';
-      }
+      if (isLoggedIn && auth.needsOnboarding && path != '/onboarding') return '/onboarding';
 
-      final authRoutes = ['/login', '/register'];
+      final authRoutes      = ['/login', '/register'];
       final protectedRoutes = ['/profile', '/orders', '/checkout'];
-      final adminRoutes = ['/admin'];
+      final adminRoutes     = ['/admin'];
 
       if (authRoutes.contains(path) && isLoggedIn) return '/';
       if (protectedRoutes.any((r) => path.startsWith(r)) && !isLoggedIn) {
         return '/login?redirect=${Uri.encodeComponent(path)}';
       }
-      if (adminRoutes.any((r) => path.startsWith(r)) && (!isLoggedIn || !isAdmin)) {
-        return '/';
-      }
+      if (adminRoutes.any((r) => path.startsWith(r)) && (!isLoggedIn || !isAdmin)) return '/';
       return null;
     },
     routes: [
-      // Onboarding (no shell — full screen, no navbar)
+      // ── Full-screen routes (no shell, no navbar) ─────────────────────────
       GoRoute(
         path: '/onboarding',
         parentNavigatorKey: _rootKey,
         builder: (c, s) => const AddressSetupScreen(),
       ),
-
-      // Email verification (no shell)
       GoRoute(
         path: '/verify-email',
         parentNavigatorKey: _rootKey,
         builder: (c, s) => VerifyEmailScreen(token: s.uri.queryParameters['token'] ?? ''),
       ),
 
+      // ── Public shell — includes floating GlassNavbar ──────────────────────
       ShellRoute(
         navigatorKey: _shellKey,
         builder: (context, state, child) => MainShell(child: child),
@@ -94,27 +91,33 @@ final routerProvider = Provider<GoRouter>((ref) {
             slug: s.pathParameters['slug']!,
             autoAdd: s.uri.queryParameters['autoAdd'] == 'true',
           )),
-          GoRoute(path: '/cart', builder: (c, s) => const CartScreen()),
-          GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
-          GoRoute(path: '/orders', builder: (c, s) => const OrdersScreen()),
+          GoRoute(path: '/cart',     builder: (c, s) => const CartScreen()),
+          GoRoute(path: '/profile',  builder: (c, s) => const ProfileScreen()),
+          GoRoute(path: '/orders',   builder: (c, s) => const OrdersScreen()),
           GoRoute(path: '/orders/:id', builder: (c, s) => OrderDetailScreen(orderId: s.pathParameters['id']!)),
           GoRoute(path: '/checkout', builder: (c, s) => const CheckoutScreen()),
           GoRoute(
             path: '/order-success/:orderId',
             builder: (c, s) => OrderSuccessScreen(orderId: s.pathParameters['orderId']!),
           ),
-          GoRoute(path: '/login', builder: (c, s) => LoginScreen(redirect: s.uri.queryParameters['redirect'])),
+          GoRoute(path: '/login',    builder: (c, s) => LoginScreen(redirect: s.uri.queryParameters['redirect'])),
           GoRoute(path: '/register', builder: (c, s) => RegisterScreen(redirect: s.uri.queryParameters['redirect'])),
+        ],
+      ),
 
-          // Admin
+      // ── Admin shell — NO public navbar, admin screens are self-contained ──
+      ShellRoute(
+        navigatorKey: _adminKey,
+        builder: (context, state, child) => child,
+        routes: [
           GoRoute(
             path: '/admin',
             builder: (c, s) => const AdminDashboardScreen(),
             routes: [
-              GoRoute(path: 'products', builder: (c, s) => const AdminProductsScreen()),
-              GoRoute(path: 'products/add', builder: (c, s) => const AdminAddProductScreen()),
-              GoRoute(path: 'products/edit/:id', builder: (c, s) => AdminAddProductScreen(productId: s.pathParameters['id'])),
-              GoRoute(path: 'orders', builder: (c, s) => const AdminOrdersScreen()),
+              GoRoute(path: 'products',            builder: (c, s) => const AdminProductsScreen()),
+              GoRoute(path: 'products/add',         builder: (c, s) => const AdminAddProductScreen()),
+              GoRoute(path: 'products/edit/:id',    builder: (c, s) => AdminAddProductScreen(productId: s.pathParameters['id'])),
+              GoRoute(path: 'orders',               builder: (c, s) => const AdminOrdersScreen()),
             ],
           ),
         ],

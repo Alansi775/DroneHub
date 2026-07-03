@@ -109,6 +109,6 @@ class OrderModel {
         items: (json['items'] as List<dynamic>? ?? [])
             .map((i) => OrderItem.fromJson(i as Map<String, dynamic>))
             .toList(),
-        createdAt: DateTime.parse(json['created_at']),
+        createdAt: DateTime.parse(json['createdAt'] ?? json['created_at'] ?? DateTime.now().toIso8601String()),
       );
 }

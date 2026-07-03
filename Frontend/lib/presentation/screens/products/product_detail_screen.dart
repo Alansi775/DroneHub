@@ -57,10 +57,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ),
         ),
         data: (p) {
-          // Auto-add to cart if user was redirected back after auth
+          // Auto-add once when redirected back after auth, then clean URL
           if (widget.autoAdd && !_didAutoAdd && ref.read(authProvider).isAuthenticated) {
             _didAutoAdd = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) => _addToCart(p));
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              await _addToCart(p);
+              // Replace URL to remove ?autoAdd=true so refresh won't re-add
+              if (mounted) context.replace('/products/${p.slug}');
+            });
           }
           return _ProductLayout(
             product: p,

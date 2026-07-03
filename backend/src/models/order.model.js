@@ -64,10 +64,12 @@ const Order = sequelize.define('Order', {
 }, {
   tableName: 'orders',
   hooks: {
-    beforeCreate: (order) => {
-      const ts = Date.now().toString().slice(-8);
-      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-      order.order_number = `DH-${ts}-${rand}`;
+    beforeValidate: (order) => {
+      if (!order.order_number) {
+        const ts = Date.now().toString().slice(-8);
+        const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+        order.order_number = `DH-${ts}-${rand}`;
+      }
     },
   },
 });
